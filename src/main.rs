@@ -29,6 +29,15 @@ async fn handle_request(
     State(state): State<Arc<AppState>>, 
     extract::Json(payload): extract::Json<ChatRequest> 
 ) -> Result<axum::Json<Value>, axum::http::StatusCode> {
+
+    let hasher = blake3::Hasher::new();
+    let mut ser = Serializer::with_formatter(hasher, CanonicalFormatter::new());
+    payload.serialize(&mut ser).unwrap();
+    let recovered_hasher = ser.into_inner();
+    let hash_res = recovered_hasher.finalize();
+    let hex_str = hash_res.to_hex().to_string();
+
+    println!("hash: {}", hex_str);
     
     let res = state.client.post("https://httpbin.org/post")
         .json(&payload)
@@ -39,13 +48,6 @@ async fn handle_request(
         Ok(response) => {
             match response.json::<Value>().await {
                 Ok(data) => {
-                    let hasher = blake3::Hasher::new();
-                    let mut ser = Serializer::with_formatter(hasher, CanonicalFormatter::new());
-                    data.serialize(&mut ser).unwrap();
-                    let recovered_hasher = ser.into_inner();
-                    let hash_res = recovered_hasher.finalize();
-                    let hex_str = hash_res.to_hex().to_string();
-                    
                     println!("SUCCESS! Hash: {}", hex_str);
                     Ok(axum::Json(data))
                 }
@@ -71,7 +73,7 @@ async fn main() {
 
     // let app = Router::new().route("/", get(|| async{ "Hello World!" }));
     let app = Router::new().route("/", post(handle_request)).with_state(shared_state);
-    let addr = "127.0.0.1:3000";
+    let addr = "127.0.0.1:3001";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     println!("Proxy is running on http://{}", addr);
     
