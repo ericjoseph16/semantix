@@ -8,6 +8,7 @@ use serde::{Serialize, Deserialize};
 use std::sync::Arc;
 use serde_json::{Serializer, Value};
 use serde_canonical_json::CanonicalFormatter;
+use dashmap::DashMap;
 
 #[derive(Deserialize, Serialize)]
 struct ChatRequest {
@@ -23,6 +24,7 @@ struct Message {
 
 struct AppState {
     client: reqwest::Client,
+    cache: DashMap<String, Value>,
 }
 
 async fn handle_request(
@@ -38,6 +40,12 @@ async fn handle_request(
     let hex_str = hash_res.to_hex().to_string();
 
     println!("hash: {}", hex_str);
+
+    if let Some(value) = state.cache.get(&hex_str) {
+        println!("found value {}", *value);
+        // clone to return data to user (only clones data not the guard)
+        return Ok(axum::Json(value.clone()))
+    }
     
     let res = state.client.post("https://httpbin.org/post")
         .json(&payload)
@@ -48,7 +56,8 @@ async fn handle_request(
         Ok(response) => {
             match response.json::<Value>().await {
                 Ok(data) => {
-                    println!("SUCCESS! Hash: {}", hex_str);
+                    println!("stored data, key: {}, value: {:?}", hex_str, data);
+                    state.cache.insert(hex_str, data.clone());
                     Ok(axum::Json(data))
                 }
                 Err(e) => {
@@ -69,6 +78,7 @@ async fn main() {
 
     let shared_state = Arc::new(AppState {
         client: reqwest::Client::new(),
+        cache: DashMap::new(),
     });
 
     // let app = Router::new().route("/", get(|| async{ "Hello World!" }));
