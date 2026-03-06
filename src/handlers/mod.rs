@@ -1,6 +1,11 @@
-// web layer (request routing)
+use axum::{extract, extract::State};
+use std::sync::Arc;
+use serde_json::{Serializer, Value};
+use serde_canonical_json::CanonicalFormatter;
+use serde::Serialize;
+use crate::{AppState, models::ChatRequest};
 
-async fn handle_request(
+pub async fn handle_request(
     State(state): State<Arc<AppState>>, 
     extract::Json(payload): extract::Json<ChatRequest> 
 ) -> Result<axum::Json<Value>, axum::http::StatusCode> {
@@ -8,16 +13,13 @@ async fn handle_request(
     let hasher = blake3::Hasher::new();
     let mut ser = Serializer::with_formatter(hasher, CanonicalFormatter::new());
     payload.serialize(&mut ser).unwrap();
-    let recovered_hasher = ser.into_inner();
-    let hash_res = recovered_hasher.finalize();
-    let hex_str = hash_res.to_hex().to_string();
+    let hex_str = ser.into_inner().finalize().to_hex().to_string();
 
     println!("hash: {}", hex_str);
 
-    if let Some(value) = state.cache.get(&hex_str) {
-        println!("found value {}", *value);
-        // clone to return data to user (only clones data not the guard)
-        return Ok(axum::Json(value.clone()))
+    if let Some(value) = state.cache.get(&hex_str).await {
+        println!("found value {}", value);
+        return Ok(axum::Json(value))
     }
     
     let res = state.client.post("https://httpbin.org/post")
@@ -30,7 +32,9 @@ async fn handle_request(
             match response.json::<Value>().await {
                 Ok(data) => {
                     println!("stored data, key: {}, value: {:?}", hex_str, data);
-                    state.cache.insert(hex_str, data.clone());
+                    
+                    state.cache.insert(hex_str, data.clone()).await;
+                    
                     Ok(axum::Json(data))
                 }
                 Err(e) => {

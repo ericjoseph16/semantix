@@ -1,18 +1,15 @@
 // data layer (structs)
 
-#[derive(Deserialize, Serialize)]
-struct ChatRequest {
-    model: String,
-    messages: Vec<Message>,
+use serde::{Serialize, Deserialize};
+
+#[derive(Deserialize, Serialize, Clone)]
+pub struct ChatRequest {
+    pub model: String,
+    pub messages: Vec<Message>,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Message {
-    role: String,
-    content: String,
-}
-
-struct AppState {
-    client: reqwest::Client,
-    cache: DashMap<String, Value>,
+#[derive(Deserialize, Serialize, Clone)]
+pub struct Message {
+    pub role: String,
+    pub content: String,
 }
